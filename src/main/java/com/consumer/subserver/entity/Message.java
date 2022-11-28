@@ -1,20 +1,25 @@
 package com.consumer.subserver.entity;
 
 public class Message {
-    private long topicId;
+    private String topic;
     private String message;
+    private String publisher;
 
-    public Message(long topicId, String message) {
-        this.topicId = topicId;
+    public Message() {
+    }
+
+    public Message(String topic, String message, String publisher) {
+        this.topic = topic;
         this.message = message;
+        this.publisher = publisher;
     }
 
-    public long getTopicId() {
-        return topicId;
+    public String getTopic() {
+        return topic;
     }
 
-    public void setTopicId(long topicId) {
-        this.topicId = topicId;
+    public void setTopic(String topic) {
+        this.topic = topic;
     }
 
     public String getMessage() {
@@ -25,11 +30,20 @@ public class Message {
         this.message = message;
     }
 
+    public String getPublisher() {
+        return publisher;
+    }
+
+    public void setPublisher(String publisher) {
+        this.publisher = publisher;
+    }
+
     @Override
     public String toString() {
         return "Message{" +
-                "topicId=" + topicId +
+                "topic='" + topic + '\'' +
                 ", message='" + message + '\'' +
+                ", publisher='" + publisher + '\'' +
                 '}';
     }
 }

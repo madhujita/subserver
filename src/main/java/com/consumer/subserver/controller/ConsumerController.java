@@ -65,12 +65,4 @@ public class ConsumerController {
         List<Subscriber> subscriberList = consumerService.getAllSubscribers();
         return new ResponseEntity<>(subscriberList, HttpStatus.OK);
     }
-
-    //TODO - remove after testing
-    @RequestMapping(value = "test", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
-    @ResponseBody
-    public ResponseEntity<String> test() {
-        consumerService.test();
-        return new ResponseEntity<>("Tested!", HttpStatus.OK);
-    }
 }

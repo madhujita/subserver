@@ -4,6 +4,9 @@ public class Topic {
     private String topicId;
     private String subscriberId;
 
+    public Topic() {
+    }
+
     public Topic(String topicId, String subscriberId) {
         this.topicId = topicId;
         this.subscriberId = subscriberId;

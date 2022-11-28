@@ -1,12 +1,14 @@
 package com.consumer.subserver.entity;
 
-import java.util.List;
 import java.util.Set;
 
 public class Subscriber {
     private Set<String> topicList;
     private String subscriberIp;
     private String subscriberId;
+
+    public Subscriber() {
+    }
 
     public Subscriber(Set<String> topicList, String subscriberIp, String subscriberId) {
         this.topicList = topicList;

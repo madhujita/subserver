@@ -7,6 +7,8 @@ import com.consumer.subserver.entity.Topic;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.*;
+import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -17,21 +19,15 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 @Service
 public class ConsumerService {
 
-    static private String queueUrl;
-    static private RestTemplate restTemplate;
-    static private HashMap<Long, MessageList> map;
+    static private HashMap<String, MessageList> map;
     static private List<Subscriber> subscriberList;
     static private Map<String, Set<String>> subscriberTopicMap;
     private ReentrantReadWriteLock reentrantReadWriteLock;
     ObjectMapper mapper;
-    UUID uuid;
-
-    //TODO - remove
-    private MessageList dummyMsgList = new MessageList();
+    private String queueIpAddress;
 
     public ConsumerService() {
-        queueUrl = "";
-        restTemplate = new RestTemplate();
+        queueIpAddress = "localhost:9000";
         map = new HashMap<>();
         reentrantReadWriteLock = new ReentrantReadWriteLock();
         mapper = new ObjectMapper();
@@ -39,54 +35,47 @@ public class ConsumerService {
         subscriberTopicMap = new HashMap<>();
     }
 
-    //TODO - remove after testing if http call goes through
-    public void test() {
-        String url = "http://localhost:8081/subscriber/health";
-        HttpHeaders headers = new HttpHeaders();
-        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
-//        headers.add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-//                "(KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36");
-        HttpEntity<String> entity = new HttpEntity<>("parameters", headers);
-        ResponseEntity<String> result =
-                restTemplate.exchange(url, HttpMethod.GET, entity, String.class);
-        System.out.println("success api");
-        System.out.println(result.getBody());
-    }
-
     @Async
-    public void fetchMessage() throws JsonProcessingException {
+    public void fetchMessage() {
+        RestTemplate restTemplate = new RestTemplate();
+
+        List<HttpMessageConverter<?>> messageConverters = new ArrayList<HttpMessageConverter<?>>();
+        MappingJackson2HttpMessageConverter converter = new MappingJackson2HttpMessageConverter();
+
+        List<MediaType> mediaTypeList = new ArrayList<>();
+        mediaTypeList.add(MediaType.valueOf("text/html;charset=UTF-8"));
+        mediaTypeList.add(MediaType.APPLICATION_JSON);
+        converter.setSupportedMediaTypes(mediaTypeList);
+        messageConverters.add(converter);
+        restTemplate.setMessageConverters(messageConverters);
+
         HttpHeaders headers = new HttpHeaders();
-        headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
-//        headers.add("user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-//                "(KHTML, like Gecko) Chrome/54.0.2840.99 Safari/537.36");
+        headers.setAccept(Collections.singletonList(MediaType.ALL));
+
         HttpEntity<String> entity = new HttpEntity<>("parameters", headers);
         while (true) {
-            ResponseEntity<Message> result =
-                    restTemplate.exchange(queueUrl, HttpMethod.GET, entity, Message.class);
-            if (result.getStatusCode().is4xxClientError()) {
+            String queueUrl = "http://" + queueIpAddress + "/nextMessage";
+            try {
+                ResponseEntity<Message> result =
+                        restTemplate.exchange(queueUrl, HttpMethod.GET, entity, Message.class);
+                Message message = result.getBody();
+                addEntry(message);
+                sendMessagesToSubscribers();
+            } catch (Exception e) {
                 return;
             }
-            Message message = result.getBody();
-            addEntry(message);
-            sendMessagesToSubscribers();
         }
-//        populateDummyMsgsFromQ();
-//        for (Message m : dummyMsgList.getMessageList()) {
-//            addEntry(m);
-//            sendMessagesToSubscribers();
-//        }
-//        dummyMsgList.setMessageList(new ArrayList<>());
     }
 
     private void addEntry(Message message) {
-        Long topicId = Long.valueOf(message.getTopicId());
+        String topic = message.getTopic();
 
-        if (topicId != null) {
+        if (topic != null) {
             reentrantReadWriteLock.writeLock().lock();
             try {
-                MessageList messageList = map.getOrDefault(topicId, new MessageList());
+                MessageList messageList = map.getOrDefault(topic, new MessageList());
                 messageList.add(message);
-                map.put(topicId, messageList);
+                map.put(topic, messageList);
             } finally {
                 reentrantReadWriteLock.writeLock().unlock();
             }
@@ -97,7 +86,7 @@ public class ConsumerService {
     public void sendMessagesToSubscribers() throws JsonProcessingException {
         reentrantReadWriteLock.writeLock().lock();
         try {
-            for (Long topic : map.keySet()) {
+            for (String topic : map.keySet()) {
                 List<Subscriber> subscribers = getSubscribers(topic);
                 for (Subscriber subscriber : subscribers) {
                     sendMessage(subscriber, map.get(topic));
@@ -111,6 +100,8 @@ public class ConsumerService {
 
     @Async
     private void sendMessage(Subscriber subscriber, MessageList messageList) throws JsonProcessingException {
+        RestTemplate restTemplate = new RestTemplate();
+
         if (subscriber.getSubscriberIp() == null)
             return;
 
@@ -126,15 +117,13 @@ public class ConsumerService {
     }
 
     //TODO - to write query to fetch all subscribers + their subscribed topics from db
-    public List<Subscriber> getSubscribers(Long topicId) {
+    public List<Subscriber> getSubscribers(String topicId) {
         return getDummySubscribers();
     }
 
 
     public void updateQueue(String ipAddress) {
-        String newUrl = "http://" + ipAddress + ":8080";
-        queueUrl = newUrl;
-        System.out.println("queueUrl" + queueUrl);
+        queueIpAddress = ipAddress;
     }
 
     public String addSubscriber(Subscriber subscriber) {
@@ -159,29 +148,6 @@ public class ConsumerService {
 
     public List<Subscriber> getAllSubscribers() {
         return subscriberList;
-    }
-
-    //TODO - remove all dummy methods below
-    private List<Message> getDummyMsgs() {
-        List<Message> list = new ArrayList<>();
-        for (int i = 0; i < 4; i++) {
-            Message msg = new Message(i, "dummy msg");
-            list.add(msg);
-        }
-        return list;
-    }
-
-    private void populateDummyMsgsFromQ() {
-
-        dummyMsgList.add(new Message(0, "msg1"));
-        dummyMsgList.add(new Message(1, "msg2"));
-
-        dummyMsgList.add(new Message(0, "msg3"));
-        dummyMsgList.add(new Message(2, "msg4"));
-
-        dummyMsgList.add(new Message(2, "msg5"));
-        dummyMsgList.add(new Message(1, "msg6"));
-
     }
 
     private List<Subscriber> getDummySubscribers() {
