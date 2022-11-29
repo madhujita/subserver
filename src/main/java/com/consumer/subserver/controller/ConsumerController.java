@@ -55,14 +55,14 @@ public class ConsumerController {
     public ResponseEntity<String> registerTopic(@RequestBody Topic topic) {
         boolean registered = consumerService.registerTopic(topic);
         if (!registered)
-            return new ResponseEntity<>("Could not register topic", HttpStatus.INTERNAL_SERVER_ERROR);
+            return new ResponseEntity<>("Could not register topic. Check if given subscriber and topic exist.", HttpStatus.INTERNAL_SERVER_ERROR);
         return new ResponseEntity<>("Topic registered", HttpStatus.OK);
     }
 
     @RequestMapping(value = "subscribers", method = RequestMethod.GET, produces = MediaType.APPLICATION_JSON_VALUE)
     @ResponseBody
-    public ResponseEntity<List<Subscriber>> getAllSubscribers() {
-        List<Subscriber> subscriberList = consumerService.getAllSubscribers();
+    public ResponseEntity<List<String>> getAllSubscribers() {
+        List<String> subscriberList = consumerService.getAllSubscribers();
         return new ResponseEntity<>(subscriberList, HttpStatus.OK);
     }
 }

@@ -6,6 +6,13 @@ import com.consumer.subserver.entity.Subscriber;
 import com.consumer.subserver.entity.Topic;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.BasicDBObject;
+import com.mongodb.MongoClient;
+import com.mongodb.client.FindIterable;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoCursor;
+import com.mongodb.client.MongoDatabase;
+import org.bson.Document;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
@@ -20,23 +27,28 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class ConsumerService {
 
     static private HashMap<String, MessageList> map;
-    static private List<Subscriber> subscriberList;
-    static private Map<String, Set<String>> subscriberTopicMap;
     private ReentrantReadWriteLock reentrantReadWriteLock;
-    ObjectMapper mapper;
+    private ObjectMapper mapper;
     private String queueIpAddress;
+    private MongoClient mongoClient;
+    private MongoDatabase database;
+    private MongoCollection<Document> subscriberCollection;
+    private MongoCollection<Document> topicCollection;
+
 
     public ConsumerService() {
         queueIpAddress = "localhost:9000";
         map = new HashMap<>();
         reentrantReadWriteLock = new ReentrantReadWriteLock();
         mapper = new ObjectMapper();
-        subscriberList = new ArrayList<>();
-        subscriberTopicMap = new HashMap<>();
+        mongoClient = new MongoClient("localhost", 27017);
+        database = mongoClient.getDatabase("pub_sub");
+        subscriberCollection = database.getCollection("subscribers");
+        topicCollection = database.getCollection("topics");
     }
 
     @Async
-    public void fetchMessage() {
+    public void fetchMessage() throws JsonProcessingException {
         RestTemplate restTemplate = new RestTemplate();
 
         List<HttpMessageConverter<?>> messageConverters = new ArrayList<HttpMessageConverter<?>>();
@@ -100,11 +112,10 @@ public class ConsumerService {
 
     @Async
     private void sendMessage(Subscriber subscriber, MessageList messageList) throws JsonProcessingException {
-        RestTemplate restTemplate = new RestTemplate();
-
         if (subscriber.getSubscriberIp() == null)
             return;
 
+        RestTemplate restTemplate = new RestTemplate();
         String url = "http://" + subscriber.getSubscriberIp() + ":8081/subscriber/message";
         HttpHeaders headers = new HttpHeaders();
         headers.setAccept(Collections.singletonList(MediaType.APPLICATION_JSON));
@@ -116,48 +127,93 @@ public class ConsumerService {
                 restTemplate.exchange(url, HttpMethod.POST, entity, Void.class);
     }
 
-    //TODO - to write query to fetch all subscribers + their subscribed topics from db
     public List<Subscriber> getSubscribers(String topicId) {
-        return getDummySubscribers();
-    }
+        List<Subscriber> subscriberList = new ArrayList<>();
+        Map<String, Set<String>> subscriberToTopics = new HashMap<>();
 
+        FindIterable<Document> iterable = topicCollection.find();
+        if (iterable.first() != null) {
+            MongoCursor<Document> cursor = iterable.iterator();
+            while (cursor.hasNext()) {
+                Document document = cursor.next();
+                ArrayList<String> subscriberIpList = (ArrayList<String>) document.get("subscriber_list");
+                for (String ip : subscriberIpList) {
+                    Set<String> topics = subscriberToTopics.getOrDefault(ip, new HashSet<>());
+                    String topicIp = (String) document.get("topic_ip");
+                    topics.add(topicIp);
+                    subscriberToTopics.put(ip, topics);
+                }
+            }
+        }
+        for (String subscriberIp : subscriberToTopics.keySet()) {
+            if (subscriberToTopics.get(subscriberIp).contains(topicId)) {
+                Subscriber subscriber = new Subscriber(subscriberToTopics.get(subscriberIp), subscriberIp);
+                subscriberList.add(subscriber);
+            }
+        }
+        return subscriberList;
+    }
 
     public void updateQueue(String ipAddress) {
         queueIpAddress = ipAddress;
     }
 
     public String addSubscriber(Subscriber subscriber) {
-        //TODO - database call to create new subscriber
+        if (subscriberExists(subscriber.getSubscriberIp()))
+            return "Subscriber already exists";
 
-        subscriber.setSubscriberId(String.valueOf(UUID.randomUUID()));
+        subscriberCollection.insertOne(new Document().append("subscriber_ip", subscriber.getSubscriberIp()));
+        return "Subscriber added successfully";
+    }
 
-        subscriberList.add(subscriber);
-        subscriberTopicMap.put(subscriber.getSubscriberId(), subscriber.getTopicList());
-        return subscriber.getSubscriberId();
+    private boolean subscriberExists(String subscriberIp) {
+        if (subscriberCollection.count() > 0) {
+            FindIterable<Document> iterable = subscriberCollection.find(new Document("subscriber_ip", subscriberIp));
+            if (iterable.first() != null) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean registerTopic(Topic topic) {
-        String subscriberId = topic.getSubscriberId();
-        if (!subscriberTopicMap.containsKey(subscriberId))
+        // Check if subscriber is valid
+        if (!subscriberExists(topic.getSubscriberIp()))
             return false;
-        Set<String> topics = subscriberTopicMap.get(subscriberId);
-        topics.add(topic.getTopicId());
-        subscriberTopicMap.put(subscriberId, topics);
-        return true;
-    }
 
-    public List<Subscriber> getAllSubscribers() {
-        return subscriberList;
-    }
+        FindIterable<Document> iterable = topicCollection.find(new Document("topic_ip", topic.getTopic()));
+        // exists
+        if (iterable.first() != null) {
+            Document document = iterable.iterator().next();
+            ArrayList<String> subscriberIpList = (ArrayList<String>) document.get("subscriber_list");
+            if (!subscriberIpList.contains(topic.getSubscriberIp())) {
+                subscriberIpList.add(topic.getSubscriberIp());
+                BasicDBObject query = new BasicDBObject();
+                query.put("topic_ip", topic.getTopic());
 
-    private List<Subscriber> getDummySubscribers() {
-        List<Subscriber> subscribers = new ArrayList<>();
-        for (int i = 0; i < 3; i++) {
-            Set<String> set = new HashSet<>();
-            set.add(String.valueOf(i));
-            Subscriber s = new Subscriber(set, "127.0.0.1", "123");
-            subscribers.add(s);
+                BasicDBObject newDocument = new BasicDBObject();
+                newDocument.put("subscriber_list", subscriberIpList);
+
+                BasicDBObject updateObject = new BasicDBObject();
+                updateObject.put("$set", newDocument);
+
+                topicCollection.updateOne(query, updateObject);
+            }
+            return true;
         }
-        return subscribers;
+        return false;
+    }
+
+    public List<String> getAllSubscribers() {
+        List<String> subscriberList = new ArrayList<>();
+        FindIterable<Document> iterable = subscriberCollection.find();
+        if (iterable.first() != null) {
+            MongoCursor<Document> cursor = iterable.iterator();
+            while (cursor.hasNext()) {
+                Document document = cursor.next();
+                subscriberList.add((String) document.get("subscriber_ip"));
+            }
+        }
+        return subscriberList;
     }
 }

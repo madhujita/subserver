@@ -1,19 +1,19 @@
 package com.consumer.subserver.entity;
 
+import javax.validation.constraints.NotNull;
 import java.util.Set;
 
 public class Subscriber {
     private Set<String> topicList;
+    @NotNull
     private String subscriberIp;
-    private String subscriberId;
 
     public Subscriber() {
     }
 
-    public Subscriber(Set<String> topicList, String subscriberIp, String subscriberId) {
+    public Subscriber(Set<String> topicList, String subscriberIp) {
         this.topicList = topicList;
         this.subscriberIp = subscriberIp;
-        this.subscriberId = subscriberId;
     }
 
     public Set<String> getTopicList() {
@@ -32,13 +32,6 @@ public class Subscriber {
         this.subscriberIp = subscriberIp;
     }
 
-    public String getSubscriberId() {
-        return subscriberId;
-    }
-
-    public void setSubscriberId(String subscriberId) {
-        this.subscriberId = subscriberId;
-    }
 
     public void addTopic(String topicId) {
         this.topicList.add(topicId);
@@ -47,9 +40,8 @@ public class Subscriber {
     @Override
     public String toString() {
         return "Subscriber{" +
-                "topicId=" + topicList +
+                "topicList=" + topicList +
                 ", subscriberIp='" + subscriberIp + '\'' +
-                ", subscriberId=" + subscriberId +
                 '}';
     }
 }

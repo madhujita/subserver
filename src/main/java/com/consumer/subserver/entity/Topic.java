@@ -1,38 +1,42 @@
 package com.consumer.subserver.entity;
 
+import javax.validation.constraints.NotNull;
+
 public class Topic {
-    private String topicId;
-    private String subscriberId;
+    @NotNull
+    private String topic;
+    @NotNull
+    private String subscriberIp;
 
     public Topic() {
     }
 
     public Topic(String topicId, String subscriberId) {
-        this.topicId = topicId;
-        this.subscriberId = subscriberId;
+        this.topic = topicId;
+        this.subscriberIp = subscriberId;
     }
 
-    public String getTopicId() {
-        return topicId;
+    public String getTopic() {
+        return topic;
     }
 
-    public void setTopicId(String topicId) {
-        this.topicId = topicId;
+    public void setTopic(String topic) {
+        this.topic = topic;
     }
 
-    public String getSubscriberId() {
-        return subscriberId;
+    public String getSubscriberIp() {
+        return subscriberIp;
     }
 
-    public void setSubscriberId(String subscriberId) {
-        this.subscriberId = subscriberId;
+    public void setSubscriberIp(String subscriberIp) {
+        this.subscriberIp = subscriberIp;
     }
 
     @Override
     public String toString() {
         return "Topic{" +
-                "topicId='" + topicId + '\'' +
-                ", subscriberId='" + subscriberId + '\'' +
+                "topicId='" + topic + '\'' +
+                ", subscriberId='" + subscriberIp + '\'' +
                 '}';
     }
 }
