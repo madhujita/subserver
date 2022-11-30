@@ -41,7 +41,7 @@ public class ConsumerService {
         map = new HashMap<>();
         reentrantReadWriteLock = new ReentrantReadWriteLock();
         mapper = new ObjectMapper();
-        mongoClient = new MongoClient("localhost", 27017);
+        mongoClient = new MongoClient("mongodb+srv://root:passwordroot@cluster0.18gmih5.mongodb.net/?retryWrites=true&w=majority");
         database = mongoClient.getDatabase("pub_sub");
         subscriberCollection = database.getCollection("subscribers");
         topicCollection = database.getCollection("topics");
